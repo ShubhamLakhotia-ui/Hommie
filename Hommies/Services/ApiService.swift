@@ -208,9 +208,9 @@ class APIService {
         // Calibrated against real Boston neighborhood data
         // 0.5 mile radius, last 2 years of crime incidents
         switch count {
-        case 0...1500:    return "Very Safe"
-        case 1501...3500: return "Generally Safe"
-        case 3501...5500: return "Moderate"
+        case 0...2000:    return "Very Safe"
+        case 2000...4500: return "Generally Safe"
+        case 4500...5500: return "Moderate"
         case 5501...8000: return "Use Caution"
         default:          return "High Activity"          }
     }

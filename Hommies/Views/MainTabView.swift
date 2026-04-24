@@ -54,7 +54,7 @@ struct MainTabView: View {
                 }
                 .tag(3)
             
-            ProfilePlaceholderView()
+            ProfileView()
                 .tabItem {
                     VStack {
                         Image(systemName: selectedTab == 4 ? "person.fill" : "person")

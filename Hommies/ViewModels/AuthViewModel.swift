@@ -102,4 +102,8 @@ class AuthViewModel: ObservableObject {
             self.errorMessage = error.localizedDescription
         }
     }
+    
+    var isAdmin: Bool {
+        return currentUser?.isAdmin == true
+    }
 }
