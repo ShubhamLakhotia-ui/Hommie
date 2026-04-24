@@ -7,6 +7,8 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import FirebaseFirestore
+import FirebaseAuth
 
 struct ListingDetailView: View {
     
@@ -14,6 +16,8 @@ struct ListingDetailView: View {
     @EnvironmentObject var viewModel: ListingsViewModel
     @Environment(\.dismiss) var dismiss
     @StateObject private var detailViewModel = ListingDetailViewModel()
+    @State private var showReportAlert = false
+    @State private var reportSubmitted = false
     let orangeColor = Color(hex: "E8622A")
     
     var body: some View {
@@ -141,6 +145,45 @@ struct ListingDetailView: View {
                     }
                     
                     Divider()
+                    
+                    // Show warning if listing is older than 30 days
+                    if Date().timeIntervalSince(listing.createdAt) > 60 * 60 * 24 * 30 {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text("This listing is over 30 days old — verify details before contacting")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(12)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(10)
+                        
+                        Divider()
+                    }
+                    
+                    // Warning badge — shows if listing has 1-2 reports
+                    // At 3+ reports listing is hidden completely from browse screen
+                    if let reportCount = listing.reportCount, reportCount > 0 && reportCount < 3 {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.shield.fill")
+                                .foregroundColor(.red)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Flagged by \(reportCount) user\(reportCount > 1 ? "s" : "")")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.red)
+                                Text("This listing has been reported. Verify details carefully before contacting.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(12)
+                        .background(Color.red.opacity(0.08))
+                        .cornerRadius(10)
+                        
+                        Divider()
+                    }
                     
                     // MARK: - Description
                     VStack(alignment: .leading, spacing: 8) {
@@ -415,11 +458,38 @@ struct ListingDetailView: View {
                 }
                 .padding(16)
             }
+        }.toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showReportAlert = true
+                } label: {
+                    Image(systemName: "flag")
+                        .foregroundColor(.secondary)
+                }
+            }
         }
         .navigationTitle(listing.title)
         .navigationBarTitleDisplayMode(.inline)
         .ignoresSafeArea(edges: .top)
-        
+        .alert("Report Listing", isPresented: $showReportAlert) {
+            Button("Fake or Scam", role: .destructive) {
+                reportListing(reason: "Fake or Scam")
+            }
+            Button("Inappropriate Content", role: .destructive) {
+                reportListing(reason: "Inappropriate Content")
+            }
+            Button("Wrong Information", role: .destructive) {
+                reportListing(reason: "Wrong Information")
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Why are you reporting this listing?")
+        }
+        .alert("Report Submitted", isPresented: $reportSubmitted) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Thank you for helping keep Hommies safe. We'll review this listing.")
+        }
         .task {
             await detailViewModel.fetchData(listing: listing)
         }
@@ -433,6 +503,32 @@ struct ListingDetailView: View {
             MKLaunchOptionsMapCenterKey: NSValue(mkCoordinate: coordinate),
             MKLaunchOptionsMapSpanKey: NSValue(mkCoordinateSpan: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01))
         ])
+    }
+    
+    func reportListing(reason: String) {
+        guard let id = listing.id,
+              let uid = Auth.auth().currentUser?.uid else { return }
+        
+        let db = Firestore.firestore()
+        
+        let report: [String: Any] = [
+            "listingId": id,
+            "listingTitle": listing.title,
+            "reportedBy": uid,
+            "reason": reason,
+            "createdAt": Timestamp(date: Date())
+        ]
+        
+        db.collection("reports").addDocument(data: report) { error in
+            if error == nil {
+                // FieldValue.increment atomically adds 1
+                // Safe even if multiple users report at same time
+                db.collection("listings").document(id).updateData([
+                    "reportCount": FieldValue.increment(Int64(1))
+                ])
+                reportSubmitted = true
+            }
+        }
     }
     // MARK: - Safety Color
     func safetyColor(for score: String) -> Color {

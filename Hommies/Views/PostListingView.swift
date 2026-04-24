@@ -424,6 +424,12 @@ struct PostListingView: View {
     
     // MARK: - Handle Post
     func handlePost() {
+        
+        // Block posting if email not verified
+        guard Auth.auth().currentUser?.isEmailVerified == true else {
+            localError = "Please verify your email before posting. Check your inbox for a verification link."
+            return
+        }
         localError = ""
         
         guard !title.trimmingCharacters(in: .whitespaces).isEmpty else {
@@ -434,8 +440,8 @@ struct PostListingView: View {
             localError = "Please enter a description"
             return
         }
-        guard let priceDouble = Double(price), priceDouble > 0 else {
-            localError = "Please enter a valid price"
+        guard let priceDouble = Double(price), priceDouble >= 400 && priceDouble <= 10000 else {
+            localError = "Price must be between $400 and $10,000/month"
             return
         }
         guard !neighborhood.trimmingCharacters(in: .whitespaces).isEmpty else {

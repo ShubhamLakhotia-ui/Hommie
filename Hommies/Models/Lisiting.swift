@@ -25,6 +25,7 @@ struct Listing: Identifiable, Codable {
     var latitude: Double?
     var longitude: Double?
     var campusName: String?
+    var reportCount: Int?
     // Room type options
     static let roomTypes = [
         "Private Room",
@@ -59,6 +60,7 @@ struct Listing: Identifiable, Codable {
         latitude: Double? = nil,
         longitude: Double? = nil,
         campusName: String? = nil,
+        reportCount: Int? = nil,
     ) {
         self.id = id
         self.ownerId = ownerId
@@ -83,6 +85,7 @@ struct Listing: Identifiable, Codable {
         self.latitude = latitude
         self.longitude = longitude
         self.campusName = campusName ?? nil
+        self.reportCount = reportCount
     }
 }
 

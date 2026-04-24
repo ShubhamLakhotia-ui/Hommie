@@ -26,7 +26,12 @@ class ListingService{
            // compactMap converts each document to a Listing
            // compactMap skips any documents that fail to decode
            return snapshot.documents.compactMap { doc in
-               try? doc.data(as: Listing.self)
+               guard let listing = try? doc.data(as: Listing.self) else { return nil }
+               // Auto-hide listings with 3+ reports
+               if let reportCount = listing.reportCount, reportCount >= 3 {
+                   return nil
+               }
+               return listing
            }
        }
     

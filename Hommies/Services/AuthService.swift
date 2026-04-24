@@ -13,6 +13,9 @@ class AuthService {
         let result = try await Auth.auth().createUser(withEmail: email, password: password)
         let firebaseUser = result.user
         
+        // Send verification email — user must verify before posting
+        try await result.user.sendEmailVerification()
+
         // Create user profile in Firestore
         let newUser = User(id: firebaseUser.uid, name: name, email: email)
         try db.collection("users").document(firebaseUser.uid).setData(from: newUser)
