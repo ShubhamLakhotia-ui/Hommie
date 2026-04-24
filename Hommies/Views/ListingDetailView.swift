@@ -13,7 +13,7 @@ struct ListingDetailView: View {
     let listing: Listing
     @EnvironmentObject var viewModel: ListingsViewModel
     @Environment(\.dismiss) var dismiss
-    
+    @StateObject private var detailViewModel = ListingDetailViewModel()
     let orangeColor = Color(hex: "E8622A")
     
     var body: some View {
@@ -239,6 +239,115 @@ struct ListingDetailView: View {
                         Divider()
                     }
                     
+                    // MARK: - Safety Score
+                    // Only shows if listing has coordinates
+                    if let lat = listing.latitude, let lon = listing.longitude,
+                       lat != 0.0 && lon != 0.0 {
+                        Divider()
+                        
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Area Safety")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                            
+                            if detailViewModel.isLoadingCrime {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                    Text("Checking safety data...")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                            } else if !detailViewModel.safetyScore.isEmpty {
+                                HStack(spacing: 12) {
+                                    // Safety icon changes based on score
+                                    Circle()
+                                        .fill(safetyColor(for: detailViewModel.safetyScore).opacity(0.15))
+                                        .frame(width: 44, height: 44)
+                                        .overlay(
+                                            Image(systemName: safetyIcon(for: detailViewModel.safetyScore))
+                                                .foregroundColor(safetyColor(for: detailViewModel.safetyScore))
+                                                .font(.system(size: 18))
+                                        )
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(detailViewModel.safetyScore)
+                                            .font(.subheadline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(safetyColor(for: detailViewModel.safetyScore))
+                                        Text("Based on nearby crime incidents")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color(.secondarySystemBackground))
+                                .cornerRadius(12)
+                            } else if !detailViewModel.crimeError.isEmpty {
+                                Text(detailViewModel.crimeError)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
+                    // MARK: - MBTA Transit
+                    if let lat = listing.latitude, let lon = listing.longitude,
+                       lat != 0.0 && lon != 0.0 {
+                        Divider()
+                        
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Nearby Transit")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                            
+                            if detailViewModel.isLoadingMBTA {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                    Text("Loading transit stops...")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                            } else if detailViewModel.mbtaStops.isEmpty {
+                                Text(detailViewModel.mbtaError.isEmpty ? "No transit stops nearby" : detailViewModel.mbtaError)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                VStack(spacing: 8) {
+                                    ForEach(detailViewModel.mbtaStops.prefix(5)) { stop in
+                                        HStack(spacing: 12) {
+                                            // Transit icon with line color
+                                            Circle()
+                                                .fill(Color(hex: stop.attributes.lineColor).opacity(0.15))
+                                                .frame(width: 36, height: 36)
+                                                .overlay(
+                                                    Image(systemName: stop.attributes.icon)
+                                                        .foregroundColor(Color(hex: stop.attributes.lineColor))
+                                                        .font(.system(size: 14))
+                                                )
+                                            
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(stop.attributes.name)
+                                                    .font(.subheadline)
+                                                    .fontWeight(.medium)
+                                                    .foregroundColor(.primary)
+                                                Text(stop.attributes.transitType)
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            Spacer()
+                                        }
+                                        .padding(10)
+                                        .background(Color(.secondarySystemBackground))
+                                        .cornerRadius(12)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
                     // MARK: - Posted By
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Posted by")
@@ -310,6 +419,10 @@ struct ListingDetailView: View {
         .navigationTitle(listing.title)
         .navigationBarTitleDisplayMode(.inline)
         .ignoresSafeArea(edges: .top)
+        
+        .task {
+            await detailViewModel.fetchData(listing: listing)
+        }
     }
     
     func openInMaps(lat: Double, lon: Double) {
@@ -320,6 +433,27 @@ struct ListingDetailView: View {
             MKLaunchOptionsMapCenterKey: NSValue(mkCoordinate: coordinate),
             MKLaunchOptionsMapSpanKey: NSValue(mkCoordinateSpan: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01))
         ])
+    }
+    // MARK: - Safety Color
+    func safetyColor(for score: String) -> Color {
+        switch score {
+        case "Very Safe": return .green
+        case "Generally Safe": return Color(hex: "00843D")
+        case "Moderate": return .orange
+        case "Use Caution": return .red
+        default: return .red
+        }
+    }
+
+    // MARK: - Safety Icon
+    func safetyIcon(for score: String) -> String {
+        switch score {
+        case "Very Safe": return "checkmark.shield.fill"
+        case "Generally Safe": return "checkmark.shield.fill"
+        case "Moderate": return "exclamationmark.shield.fill"
+        case "Use Caution": return "xmark.shield.fill"
+        default: return "xmark.shield.fill"
+        }
     }
 }
 
