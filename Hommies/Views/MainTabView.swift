@@ -45,7 +45,7 @@ struct MainTabView: View {
                 }
                 .tag(2)
             
-            Text("Favorites")
+            FavoritesView()
                 .tabItem {
                     VStack {
                         Image(systemName: selectedTab == 3 ? "heart.fill" : "heart")
