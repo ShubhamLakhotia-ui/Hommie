@@ -360,27 +360,68 @@ struct ListingDetailView: View {
                             } else {
                                 VStack(spacing: 8) {
                                     ForEach(detailViewModel.mbtaStops.prefix(5)) { stop in
+                                        let color = stop.attributes.lineColorFromRoutes(stop.routes)
+                                        let isBus = stop.attributes.vehicleType == 3
+                                        
                                         HStack(spacing: 12) {
-                                            // Transit icon with line color
+                                            // Icon circle
                                             Circle()
-                                                .fill(Color(hex: stop.attributes.lineColor).opacity(0.15))
+                                                .fill(Color(hex: color).opacity(0.15))
                                                 .frame(width: 36, height: 36)
                                                 .overlay(
                                                     Image(systemName: stop.attributes.icon)
-                                                        .foregroundColor(Color(hex: stop.attributes.lineColor))
+                                                        .foregroundColor(Color(hex: color))
                                                         .font(.system(size: 14))
                                                 )
                                             
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(stop.attributes.name)
-                                                    .font(.subheadline)
-                                                    .fontWeight(.medium)
-                                                    .foregroundColor(.primary)
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                // Stop name + distance
+                                                HStack {
+                                                    Text(stop.attributes.name)
+                                                        .font(.subheadline)
+                                                        .fontWeight(.medium)
+                                                        .foregroundColor(.primary)
+                                                        .lineLimit(1)
+                                                    Spacer()
+                                                    // Distance badge
+                                                    if stop.distanceMiles > 0 {
+                                                        Text(String(format: "%.1f mi", stop.distanceMiles))
+                                                            .font(.caption2)
+                                                            .foregroundColor(.secondary)
+                                                    }
+                                                }
+                                                
+                                                // Transit type label
                                                 Text(stop.attributes.transitType)
                                                     .font(.caption)
                                                     .foregroundColor(.secondary)
+                                                
+                                                // Route badges
+                                                if !stop.routes.isEmpty {
+                                                    ScrollView(.horizontal, showsIndicators: false) {
+                                                        HStack(spacing: 4) {
+                                                            ForEach(stop.routes.prefix(4), id: \.id) { route in
+                                                                HStack(spacing: 3) {
+                                                                    // Show bus icon for bus routes
+                                                                    if isBus {
+                                                                        Image(systemName: "bus.fill")
+                                                                            .font(.system(size: 8))
+                                                                            .foregroundColor(.white)
+                                                                    }
+                                                                    Text(route.attributes.displayName)
+                                                                        .font(.caption2)
+                                                                        .fontWeight(.semibold)
+                                                                        .foregroundColor(.white)
+                                                                }
+                                                                .padding(.horizontal, 6)
+                                                                .padding(.vertical, 3)
+                                                                .background(Color(hex: color))
+                                                                .cornerRadius(4)
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
-                                            Spacer()
                                         }
                                         .padding(10)
                                         .background(Color(.secondarySystemBackground))

@@ -6,9 +6,43 @@ struct MBTAResponse: Codable {
     let data: [MBTAStop]
 }
 
+struct MBTARoutesResponse: Codable {
+    let data: [MBTARoute]
+}
+
+struct MBTARoute: Codable {
+    let id: String
+    let attributes: MBTARouteAttributes
+}
+
+struct MBTARouteAttributes: Codable {
+    let longName: String
+    let shortName: String
+    let type: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case longName = "long_name"
+        case shortName = "short_name"
+        case type
+    }
+    
+    // Use short name for buses (e.g. "28"), long name for subway (e.g. "Red Line")
+    var displayName: String {
+        return shortName.isEmpty ? longName : shortName
+    }
+}
+
 struct MBTAStop: Codable, Identifiable {
     let id: String
     let attributes: MBTAStopAttributes
+    var routes: [MBTARoute] = []
+    // Calculated after fetch — not from API response
+    var distanceMiles: Double = 0.0
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case attributes
+    }
 }
 
 struct MBTAStopAttributes: Codable {
@@ -26,12 +60,7 @@ struct MBTAStopAttributes: Codable {
         case description
     }
     
-    // MBTA Vehicle Types:
-    // 0 = Light Rail (Green Line + Mattapan Trolley)
-    // 1 = Heavy Rail (Red, Orange, Blue Lines)
-    // 2 = Commuter Rail
-    // 3 = Bus
-    // 4 = Ferry
+    // 0 = Light Rail, 1 = Heavy Rail, 2 = Commuter Rail, 3 = Bus, 4 = Ferry
     var transitType: String {
         switch vehicleType {
         case 0: return "Green Line"
@@ -62,20 +91,30 @@ struct MBTAStopAttributes: Codable {
         }
     }
     
+    // Fallback color based on vehicle type
     var lineColor: String {
         switch vehicleType {
         case 0: return "00843D"
-        case 1:
-            let stopName = name.lowercased()
-            if stopName.contains("red") { return "DA291C" }
-            if stopName.contains("orange") { return "ED8B00" }
-            if stopName.contains("blue") { return "003DA5" }
-            return "80276C"
+        case 1: return "ED8B00"
         case 2: return "80276C"
         case 3: return "FFC72C"
         case 4: return "008EAA"
         default: return "888780"
         }
+    }
+    
+    // Accurate color from actual route name — more reliable than vehicleType alone
+    func lineColorFromRoutes(_ routes: [MBTARoute]) -> String {
+        guard let firstRoute = routes.first else { return lineColor }
+        let name = firstRoute.attributes.longName.lowercased()
+        if name.contains("red") { return "DA291C" }
+        if name.contains("orange") { return "ED8B00" }
+        if name.contains("blue") { return "003DA5" }
+        if name.contains("green") { return "00843D" }
+        if name.contains("silver") { return "7C878E" }
+        if name.contains("fairmount") { return "80276C" }
+        if name.contains("franklin") { return "80276C" }
+        return lineColor
     }
 }
 
@@ -88,7 +127,6 @@ struct CrimeSQLResult: Codable {
     let records: [[String: AnyCodable]]
 }
 
-// AnyCodable lets us decode dynamic JSON values
 struct AnyCodable: Codable {
     let value: Any
     
@@ -123,34 +161,101 @@ struct AnyCodable: Codable {
 class APIService {
     
     static let shared = APIService()
-    
-    // In-memory cache — key is listing ID
-    // Returns cached data instantly on second visit
     private var mbtaCache: [String: [MBTAStop]] = [:]
     private var crimeCache: [String: String] = [:]
     
     // MARK: - Fetch Nearby MBTA Stops (with cache)
+    // Fetches subway, commuter rail and bus separately with different radii
     func fetchNearbyStops(listingID: String, latitude: Double, longitude: Double) async throws -> [MBTAStop] {
         
         if let cached = mbtaCache[listingID] {
             return cached
         }
         
-        let urlString = "https://api-v3.mbta.com/stops?filter[latitude]=\(latitude)&filter[longitude]=\(longitude)&filter[radius]=0.5&sort=distance&page[limit]=8"
+        // Fetch all three types concurrently
+        async let subwayFetch = fetchStopsByType(
+            latitude: latitude, longitude: longitude,
+            radius: 1.0,
+            routeType: "0,1"
+        )
+        async let busFetch = fetchStopsByType(
+            latitude: latitude, longitude: longitude,
+            radius: 0.3,
+            routeType: "3"
+        )
+        async let commuterFetch = fetchStopsByType(
+            latitude: latitude, longitude: longitude,
+            radius: 1.5,
+            routeType: "2"
+        )
+        
+        let (subway, bus, commuter) = try await (subwayFetch, busFetch, commuterFetch)
+        
+        // Subway first then commuter rail then bus
+        var allStops = subway + commuter + bus
+        
+        // Remove duplicates by name — same station can have different IDs per platform
+        var seenNames = Set<String>()
+        allStops = allStops.filter { seenNames.insert($0.attributes.name).inserted }
+        
+        let limited = Array(allStops.prefix(8))
+        
+        // Fetch routes for each stop
+        var stopsWithRoutes: [MBTAStop] = []
+        for var stop in limited {
+            if let routes = try? await fetchRoutes(for: stop.id) {
+                stop.routes = routes
+            }
+            stopsWithRoutes.append(stop)
+        }
+        
+        mbtaCache[listingID] = stopsWithRoutes
+        return stopsWithRoutes
+    }
+    
+    // Fetch stops filtered by vehicle type and radius
+    private func fetchStopsByType(
+        latitude: Double,
+        longitude: Double,
+        radius: Double,
+        routeType: String
+    ) async throws -> [MBTAStop] {
+        let urlString = "https://api-v3.mbta.com/stops?filter[latitude]=\(latitude)&filter[longitude]=\(longitude)&filter[radius]=\(radius)&filter[route_type]=\(routeType)&sort=distance&page[limit]=4"
         
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
         }
         
         let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(MBTAResponse.self, from: data)
-        mbtaCache[listingID] = response.data
+        
+        let listingLocation = CLLocation(latitude: latitude, longitude: longitude)
+        var response = try JSONDecoder().decode(MBTAResponse.self, from: data)
+        var stopsWithDistance = response.data
+        
+        // Calculate distance from listing to each stop in miles
+        for i in 0..<stopsWithDistance.count {
+            if let stopLat = stopsWithDistance[i].attributes.latitude,
+               let stopLon = stopsWithDistance[i].attributes.longitude {
+                let stopLocation = CLLocation(latitude: stopLat, longitude: stopLon)
+                let distanceMeters = listingLocation.distance(from: stopLocation)
+                stopsWithDistance[i].distanceMiles = distanceMeters / 1609.344
+            }
+        }
+        return stopsWithDistance
+    }
+    
+    // Fetch all routes serving a specific stop
+    private func fetchRoutes(for stopID: String) async throws -> [MBTARoute] {
+        let urlString = "https://api-v3.mbta.com/routes?filter[stop]=\(stopID)"
+        guard let url = URL(string: urlString) else {
+            throw URLError(.badURL)
+        }
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let response = try JSONDecoder().decode(MBTARoutesResponse.self, from: data)
         return response.data
     }
     
     // MARK: - Fetch Crime Data (with cache)
-    // Uses COUNT(*) with year filter — accurate and fast
-    // Only counts crimes from 2023 onwards — recent data is more relevant
     func fetchCrimeData(listingID: String, latitude: Double, longitude: Double) async throws -> String {
         
         if let cached = crimeCache[listingID] {
@@ -163,7 +268,7 @@ class APIService {
         let minLon = longitude - delta
         let maxLon = longitude + delta
         
-        // Dynamically calculate 2 years ago — works in any year
+        // Dynamically calculate 2 years ago
         let currentYear = Calendar.current.component(.year, from: Date())
         let twoYearsAgo = currentYear - 2
         
@@ -203,15 +308,13 @@ class APIService {
     }
     
     // MARK: - Safety Score
-    // Thresholds based on 2 years of crime data within 1 mile radius
     private func safetyScore(from count: Int) -> String {
-        // Calibrated against real Boston neighborhood data
-        // 0.5 mile radius, last 2 years of crime incidents
         switch count {
         case 0...2000:    return "Very Safe"
-        case 2000...4500: return "Generally Safe"
-        case 4500...5500: return "Moderate"
+        case 2001...4500: return "Generally Safe"
+        case 4501...5500: return "Moderate"
         case 5501...8000: return "Use Caution"
-        default:          return "High Activity"          }
+        default:          return "High Activity"
+        }
     }
 }
