@@ -1,19 +1,18 @@
-//
-//  PostListingView.swift
-//  Hommies
-//
-//  Created by Shubham Lakhotia on 4/22/26.
-//
-
 import SwiftUI
 import PhotosUI
 import FirebaseAuth
+import FirebaseFirestore
+import FirebaseStorage
 
 struct PostListingView: View {
     
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var viewModel: ListingsViewModel
-    
+    @EnvironmentObject var localizationManager: LocalizationManager
+
+    var existingListing: Listing? = nil
+    var isEditing: Bool { existingListing != nil }
+
     @State private var title = ""
     @State private var description = ""
     @State private var price = ""
@@ -26,10 +25,11 @@ struct PostListingView: View {
     @State private var petsAllowed = false
     @State private var utilitiesIncluded = false
     @State private var availableFrom = Date()
-    // Default end date is 3 months from today — suits most student sublets
     @State private var availableTo = Calendar.current.date(byAdding: .month, value: 3, to: Date()) ?? Date()
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
+    @State private var existingImageURLs: [String] = []
+    @State private var newImages: [UIImage] = []
     @State private var localError = ""
     @State private var showSuccess = false
     @State private var latitude: Double = 0.0
@@ -37,6 +37,8 @@ struct PostListingView: View {
     @State private var locationName: String = ""
     @State private var showLocationPicker = false
     @State private var selectedCampus = Campus.northeastern
+    @State private var isPosting = false
+    
     let orangeColor = Color(hex: "E8622A")
     
     var body: some View {
@@ -45,8 +47,7 @@ struct PostListingView: View {
                 
                 // MARK: - Photos
                 VStack(alignment: .leading, spacing: 12) {
-                    SectionHeader(title: "Photos", subtitle: "Add up to 5 photos")
-                    
+                    SectionHeader(title: "post_photos".localized, subtitle: "post_photos_subtitle".localized)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
                             ForEach(0..<selectedImages.count, id: \.self) { index in
@@ -59,7 +60,15 @@ struct PostListingView: View {
                                     
                                     Button {
                                         selectedImages.remove(at: index)
-                                        selectedPhotoItems.remove(at: index)
+                                        let existingCount = existingImageURLs.count
+                                        if index >= existingCount {
+                                            let newIndex = index - existingCount
+                                            if newIndex < selectedPhotoItems.count {
+                                                selectedPhotoItems.remove(at: newIndex)
+                                            }
+                                        } else {
+                                            existingImageURLs.remove(at: index)
+                                        }
                                     } label: {
                                         ZStack {
                                             Circle()
@@ -84,7 +93,7 @@ struct PostListingView: View {
                                         Image(systemName: "plus")
                                             .font(.system(size: 24))
                                             .foregroundColor(orangeColor)
-                                        Text("Add Photo")
+                                        Text("post_add_photo".localized)
                                             .font(.caption)
                                             .foregroundColor(orangeColor)
                                     }
@@ -113,16 +122,25 @@ struct PostListingView: View {
                         .padding(.horizontal, 2)
                         .padding(.vertical, 4)
                     }
+                    
+                    // Photo required hint
+                    if selectedImages.isEmpty {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .foregroundColor(.orange)
+                                .font(.caption)
+                            Text("At least one photo is required")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
+                    }
                 }
                 .padding(.horizontal, 16)
                 
                 // MARK: - Basic Info
                 VStack(alignment: .leading, spacing: 12) {
-                    SectionHeader(title: "Basic Info", subtitle: nil)
-                    
-                    HommiesTextField(icon: "pencil", placeholder: "Listing title", text: $title)
-                    
-                    // ZStack used to add placeholder text since TextEditor doesn't support it natively
+                    SectionHeader(title: "post_basic_info".localized, subtitle: nil)
+                    HommiesTextField(icon: "pencil", placeholder: "post_listing_title".localized, text: $title)
                     ZStack(alignment: .topLeading) {
                         RoundedRectangle(cornerRadius: 14)
                             .fill(Color(.secondarySystemBackground))
@@ -130,15 +148,13 @@ struct PostListingView: View {
                                 RoundedRectangle(cornerRadius: 14)
                                     .stroke(Color(.systemGray4), lineWidth: 1)
                             )
-                        
                         if description.isEmpty {
-                            Text("Describe your place — highlight what makes it special")
+                            Text("post_description_placeholder".localized)
                                 .foregroundColor(Color(.placeholderText))
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 16)
                                 .font(.body)
                         }
-                        
                         TextEditor(text: $description)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
@@ -152,10 +168,10 @@ struct PostListingView: View {
                 
                 // MARK: - Pricing
                 VStack(alignment: .leading, spacing: 12) {
-                    SectionHeader(title: "Pricing", subtitle: nil)
+                    SectionHeader(title: "post_pricing".localized, subtitle: nil)
                     HommiesTextField(
                         icon: "dollarsign.circle.fill",
-                        placeholder: "Monthly rent (e.g. 950)",
+                        placeholder: "post_rent_placeholder".localized,
                         text: $price,
                         keyboardType: .numberPad
                     )
@@ -164,13 +180,11 @@ struct PostListingView: View {
                 
                 // MARK: - Room Details
                 VStack(alignment: .leading, spacing: 12) {
-                    SectionHeader(title: "Room Details", subtitle: nil)
-                    
+                    SectionHeader(title: "post_room_details".localized, subtitle: nil)
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Room type")
+                        Text("post_room_type".localized)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
-                        
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(Listing.roomTypes, id: \.self) { type in
@@ -179,27 +193,23 @@ struct PostListingView: View {
                                         isSelected: selectedRoomType == type,
                                         color: orangeColor
                                     )
-                                    .onTapGesture {
-                                        selectedRoomType = type
-                                    }
+                                    .onTapGesture { selectedRoomType = type }
                                 }
                             }
                         }
                     }
-                    
                     HommiesTextField(
                         icon: "person.2.fill",
-                        placeholder: "Number of roommates (e.g. 2)",
+                        placeholder: "post_roommates_placeholder".localized,
                         text: $roommates,
                         keyboardType: .numberPad
                     )
-                    
                     VStack(spacing: 0) {
-                        ToggleRow(icon: "sofa.fill", title: "Furnished", isOn: $furnished)
+                        ToggleRow(icon: "sofa.fill", title: "post_furnished".localized, isOn: $furnished)
                         Divider().padding(.leading, 44)
-                        ToggleRow(icon: "pawprint.fill", title: "Pets allowed", isOn: $petsAllowed)
+                        ToggleRow(icon: "pawprint.fill", title: "post_pets_allowed".localized, isOn: $petsAllowed)
                         Divider().padding(.leading, 44)
-                        ToggleRow(icon: "bolt.fill", title: "Utilities included", isOn: $utilitiesIncluded)
+                        ToggleRow(icon: "bolt.fill", title: "post_utilities_included".localized, isOn: $utilitiesIncluded)
                     }
                     .background(Color(.secondarySystemBackground))
                     .cornerRadius(14)
@@ -212,8 +222,7 @@ struct PostListingView: View {
                 
                 // MARK: - Campus Selection
                 VStack(alignment: .leading, spacing: 12) {
-                    SectionHeader(title: "Nearest Campus", subtitle: "Distance will be calculated automatically")
-                    
+                    SectionHeader(title: "post_nearest_campus".localized, subtitle: "post_nearest_campus_subtitle".localized)
                     VStack(spacing: 0) {
                         ForEach(Campus.all, id: \.name) { campus in
                             Button {
@@ -242,14 +251,11 @@ struct PostListingView: View {
                         RoundedRectangle(cornerRadius: 14)
                             .stroke(Color(.systemGray4), lineWidth: 1)
                     )
-                    
-                    // Show calculated distance if location is pinned
-                    if let lat = latitude == 0.0 ? nil : Optional(latitude),
-                       let lon = longitude == 0.0 ? nil : Optional(longitude) {
+                    if latitude != 0.0 && longitude != 0.0 {
                         HStack(spacing: 8) {
                             Image(systemName: "mappin.circle.fill")
                                 .foregroundColor(orangeColor)
-                            Text("Distance to \(selectedCampus.name): \(distanceBetween(lat1: lat, lon1: lon, lat2: selectedCampus.coordinate.latitude, lon2: selectedCampus.coordinate.longitude))")
+                            Text("\("post_distance_to".localized) \(selectedCampus.name): \(distanceBetween(lat1: latitude, lon1: longitude, lat2: selectedCampus.coordinate.latitude, lon2: selectedCampus.coordinate.longitude))")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
@@ -259,20 +265,17 @@ struct PostListingView: View {
                 .padding(.horizontal, 16)
                 
                 // MARK: - Location
-                // MARK: - Location
                 VStack(alignment: .leading, spacing: 12) {
-                    SectionHeader(title: "Location", subtitle: nil)
-                    HommiesTextField(icon: "location.fill", placeholder: "Neighborhood (e.g. Allston)", text: $neighborhood)
-                   
-                    // Map pin button — opens LocationPickerView as sheet
+                    SectionHeader(title: "post_location".localized, subtitle: nil)
+                    HommiesTextField(icon: "location.fill", placeholder: "post_neighborhood_placeholder".localized, text: $neighborhood)
                     Button {
                         showLocationPicker = true
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: latitude == 0.0 ? "map" : "mappin.circle.fill")
-                                .foregroundColor(Color(hex: "E8622A"))
+                                .foregroundColor(orangeColor)
                                 .frame(width: 20)
-                            Text(locationName.isEmpty ? "Pin location on map" : locationName)
+                            Text(locationName.isEmpty ? "post_pin_location".localized : locationName)
                                 .foregroundColor(locationName.isEmpty ? .secondary : .primary)
                                 .font(.body)
                                 .lineLimit(1)
@@ -290,8 +293,6 @@ struct PostListingView: View {
                                 .stroke(latitude != 0.0 ? Color(hex: "E8622A").opacity(0.5) : Color(.systemGray4), lineWidth: 1)
                         )
                     }
-            
-                    
                 }
                 .padding(.horizontal, 16)
                 .sheet(isPresented: $showLocationPicker) {
@@ -301,32 +302,28 @@ struct PostListingView: View {
                         locationName: $locationName
                     )
                 }
-               
+                
                 // MARK: - Availability
                 VStack(alignment: .leading, spacing: 12) {
-                    SectionHeader(title: "Availability", subtitle: nil)
-                    
+                    SectionHeader(title: "post_availability".localized, subtitle: nil)
                     VStack(spacing: 0) {
                         HStack {
                             Image(systemName: "calendar")
                                 .foregroundColor(orangeColor)
                                 .frame(width: 20)
-                            DatePicker("Available from",
+                            DatePicker("post_available_from".localized,
                                       selection: $availableFrom,
                                       displayedComponents: .date)
                             .accentColor(orangeColor)
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
-                        
                         Divider().padding(.leading, 44)
-                        
                         HStack {
                             Image(systemName: "calendar.badge.checkmark")
                                 .foregroundColor(orangeColor)
                                 .frame(width: 20)
-                            // in: availableFrom... prevents selecting end date before start date
-                            DatePicker("Available to",
+                            DatePicker("post_available_to".localized,
                                       selection: $availableTo,
                                       in: availableFrom...,
                                       displayedComponents: .date)
@@ -346,9 +343,7 @@ struct PostListingView: View {
                 
                 // MARK: - Contact
                 VStack(alignment: .leading, spacing: 12) {
-                    SectionHeader(title: "Contact", subtitle: nil)
-                    
-                    // Email auto-filled from logged in user — not editable
+                    SectionHeader(title: "post_contact".localized, subtitle: nil)
                     HStack(spacing: 12) {
                         Image(systemName: "envelope.fill")
                             .foregroundColor(orangeColor)
@@ -357,7 +352,7 @@ struct PostListingView: View {
                             .foregroundColor(.secondary)
                             .font(.body)
                         Spacer()
-                        Text("Auto-filled")
+                        Text("post_auto_filled".localized)
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -369,10 +364,9 @@ struct PostListingView: View {
                         RoundedRectangle(cornerRadius: 14)
                             .stroke(Color(.systemGray4), lineWidth: 1)
                     )
-                    
                     HommiesTextField(
                         icon: "phone.fill",
-                        placeholder: "Phone number (optional)",
+                        placeholder: "post_phone_placeholder".localized,
                         text: $contactPhone,
                         keyboardType: .phonePad
                     )
@@ -388,7 +382,7 @@ struct PostListingView: View {
                         .multilineTextAlignment(.center)
                 }
                 
-                // MARK: - Post Button
+                // MARK: - Post/Save Button
                 Button {
                     handlePost()
                 } label: {
@@ -396,10 +390,10 @@ struct PostListingView: View {
                         RoundedRectangle(cornerRadius: 16)
                             .fill(orangeColor)
                             .frame(height: 56)
-                        if viewModel.isLoading {
+                        if viewModel.isLoading || isPosting {
                             ProgressView().tint(.white)
                         } else {
-                            Text("Post Listing")
+                            Text(isEditing ? "edit_save_changes".localized : "post_button".localized)
                                 .font(.headline)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
@@ -407,54 +401,108 @@ struct PostListingView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .disabled(viewModel.isLoading)
+                .disabled(viewModel.isLoading || isPosting)
                 
                 Spacer().frame(height: 20)
             }
             .padding(.top, 16)
         }
-        .navigationTitle("Post a Listing")
+        .navigationTitle(isEditing ? "edit_listing_title".localized : "post_title".localized)
         .navigationBarTitleDisplayMode(.large)
-        .alert("Listing Posted!", isPresented: $showSuccess) {
-            Button("OK") { resetForm() }
+        .onAppear {
+            prefillIfEditing()
+        }
+        .alert(isEditing ? "edit_success_title".localized : "post_success_title".localized, isPresented: $showSuccess) {
+            Button("OK") {
+                if !isEditing {
+                    resetForm()
+                } else {
+                    // Refresh listings to show updated photo
+                    Task {
+                        await viewModel.fetchListings()
+                    }
+                }
+            }
         } message: {
-            Text("Your listing is now live for other students to see.")
+            Text(isEditing ? "edit_success_message".localized : "post_success_message".localized)
         }
     }
     
-    // MARK: - Handle Post
+    // MARK: - Pre-fill form if editing
+    func prefillIfEditing() {
+        guard let listing = existingListing else { return }
+        title = listing.title
+        description = listing.description
+        price = "\(Int(listing.price))"
+        selectedRoomType = listing.roomType
+        roommates = "\(listing.roommates)"
+        furnished = listing.furnished
+        petsAllowed = listing.petsAllowed
+        utilitiesIncluded = listing.utilitiesIncluded
+        neighborhood = listing.neighborhood
+        availableFrom = listing.availableFrom
+        availableTo = listing.availableTo
+        contactPhone = listing.contactPhone
+        latitude = listing.latitude ?? 0.0
+        longitude = listing.longitude ?? 0.0
+        locationName = listing.neighborhood
+        if let campusName = listing.campusName,
+           let found = Campus.all.first(where: { $0.name == campusName }) {
+            selectedCampus = found
+        }
+        // Store existing URLs separately
+        existingImageURLs = listing.imageURLs
+        // Load existing images for display
+        Task {
+            for urlString in listing.imageURLs {
+                guard let url = URL(string: urlString) else { continue }
+                if let (data, _) = try? await URLSession.shared.data(from: url),
+                   let image = UIImage(data: data) {
+                    await MainActor.run {
+                        selectedImages.append(image)
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Handle Post / Update
     func handlePost() {
+        // If editing — update existing listing
+        if let existing = existingListing, let id = existing.id {
+            Task { await updateListing(id: id) }
+            return
+        }
         
-        // Block posting if email not verified
+        // Validate at least 1 photo for new listing
+        guard !selectedImages.isEmpty else {
+            localError = "Please add at least one photo"
+            return
+        }
         guard Auth.auth().currentUser?.isEmailVerified == true else {
-            localError = "Please verify your email before posting. Check your inbox for a verification link."
+            localError = "error_email_not_verified".localized
             return
         }
         localError = ""
-        
         guard !title.trimmingCharacters(in: .whitespaces).isEmpty else {
-            localError = "Please enter a title"
+            localError = "error_title_required".localized
             return
         }
         guard !description.trimmingCharacters(in: .whitespaces).isEmpty else {
-            localError = "Please enter a description"
+            localError = "error_description_required".localized
             return
         }
         guard let priceDouble = Double(price), priceDouble >= 400 && priceDouble <= 10000 else {
-            localError = "Price must be between $400 and $10,000/month"
+            localError = "error_price_range".localized
             return
         }
         guard !neighborhood.trimmingCharacters(in: .whitespaces).isEmpty else {
-            localError = "Please enter a neighborhood"
+            localError = "error_neighborhood_required".localized
             return
         }
-//        guard !distanceToCampus.trimmingCharacters(in: .whitespaces).isEmpty else {
-//            localError = "Please enter distance to campus"
-//            return
-//        }
         guard let user = authViewModel.currentUser,
               let uid = Auth.auth().currentUser?.uid else {
-            localError = "Please sign in to post a listing"
+            localError = "error_sign_in_required".localized
             return
         }
         
@@ -472,12 +520,12 @@ struct PostListingView: View {
             availableFrom: availableFrom,
             availableTo: availableTo,
             neighborhood: neighborhood.trimmingCharacters(in: .whitespaces),
-            distanceToCampus: distanceBetween(
-                lat1: latitude,
-                lon1: longitude,
-                lat2: selectedCampus.coordinate.latitude,
-                lon2: selectedCampus.coordinate.longitude
-            ),
+            distanceToCampus: (latitude != 0.0 || longitude != 0.0)
+                ? distanceBetween(
+                    lat1: latitude, lon1: longitude,
+                    lat2: selectedCampus.coordinate.latitude,
+                    lon2: selectedCampus.coordinate.longitude)
+                : "",
             roommates: Int(roommates) ?? 0,
             imageURLs: [],
             contactEmail: user.email,
@@ -485,13 +533,105 @@ struct PostListingView: View {
             createdAt: Date(),
             latitude: latitude == 0.0 ? nil : latitude,
             longitude: longitude == 0.0 ? nil : longitude,
-            campusName: selectedCampus.name,
+            campusName: selectedCampus.name
         )
         
         Task {
             await viewModel.postListing(listing: newListing, images: selectedImages)
             if viewModel.postSuccess {
                 showSuccess = true
+            }
+        }
+    }
+    
+    // MARK: - Update Listing in Firestore
+    func updateListing(id: String) async {
+        
+        // Validate at least 1 photo when editing
+        guard !selectedImages.isEmpty else {
+            await MainActor.run {
+                localError = "Please add at least one photo"
+            }
+            return
+        }
+        
+        guard let priceDouble = Double(price),
+              priceDouble >= 400 && priceDouble <= 10000 else {
+            await MainActor.run {
+                localError = "error_price_range".localized
+            }
+            return
+        }
+        
+        await MainActor.run {
+            isPosting = true
+            localError = ""
+        }
+        
+        // Start with remaining existing URLs
+        var finalImageURLs = existingImageURLs
+        
+        // Upload only newly added images beyond existing count
+        let newImagesToUpload = Array(selectedImages.dropFirst(existingImageURLs.count))
+        
+        for (index, image) in newImagesToUpload.enumerated() {
+            if let imageData = image.jpegData(compressionQuality: 0.7) {
+                do {
+                    // Use user UID in path to match Storage rules
+                    guard let uid = Auth.auth().currentUser?.uid else { continue }
+                    let storageRef = Storage.storage()
+                        .reference()
+                        .child("listings/\(uid)/\(id)_photo_\(existingImageURLs.count + index).jpg")
+                    let _ = try await storageRef.putDataAsync(imageData)
+                    let url = try await storageRef.downloadURL()
+                    finalImageURLs.append(url.absoluteString)
+                    print("New photo uploaded successfully ✅")
+                } catch {
+                    print("Failed to upload image \(index): \(error)")
+                }
+            }
+        }
+        
+        let updatedData: [String: Any] = [
+            "title": title.trimmingCharacters(in: .whitespaces),
+            "description": description.trimmingCharacters(in: .whitespaces),
+            "price": priceDouble,
+            "roomType": selectedRoomType,
+            "furnished": furnished,
+            "petsAllowed": petsAllowed,
+            "utilitiesIncluded": utilitiesIncluded,
+            "neighborhood": neighborhood.trimmingCharacters(in: .whitespaces),
+            "distanceToCampus": (latitude != 0.0 || longitude != 0.0)
+                ? distanceBetween(
+                    lat1: latitude, lon1: longitude,
+                    lat2: selectedCampus.coordinate.latitude,
+                    lon2: selectedCampus.coordinate.longitude)
+                : "",
+            "campusName": selectedCampus.name,
+            "roommates": Int(roommates) ?? 0,
+            "availableFrom": Timestamp(date: availableFrom),
+            "availableTo": Timestamp(date: availableTo),
+            "contactPhone": contactPhone,
+            "latitude": latitude == 0.0 ? nil : latitude,
+            "longitude": longitude == 0.0 ? nil : longitude,
+            "imageURLs": finalImageURLs
+        ]
+        
+        do {
+            try await Firestore.firestore()
+                .collection("listings")
+                .document(id)
+                .updateData(updatedData)
+            await MainActor.run {
+                // Clear API cache so detail view shows fresh data
+                APIService.shared.clearCache()
+                isPosting = false
+                showSuccess = true
+            }
+        } catch {
+            await MainActor.run {
+                localError = error.localizedDescription
+                isPosting = false
             }
         }
     }
@@ -513,10 +653,13 @@ struct PostListingView: View {
         availableTo = Calendar.current.date(byAdding: .month, value: 3, to: Date()) ?? Date()
         selectedImages = []
         selectedPhotoItems = []
+        existingImageURLs = []
+        newImages = []
         latitude = 0.0
         longitude = 0.0
         locationName = ""
         showLocationPicker = false
+        selectedCampus = Campus.northeastern
     }
 }
 

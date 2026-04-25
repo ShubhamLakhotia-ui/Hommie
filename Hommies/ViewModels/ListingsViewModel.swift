@@ -1,28 +1,56 @@
 import Foundation
 import UIKit
 import Combine
+import FirebaseAuth
 
 class ListingsViewModel: ObservableObject {
-    
+
     @Published var listings: [Listing] = []
     @Published var filteredListings: [Listing] = []
     @Published var favoriteIDs: Set<String> = []
     @Published var isLoading = false
     @Published var errorMessage = ""
     @Published var postSuccess = false
-    
+
     @Published var searchText = ""
     @Published var minPrice: Double = 0
     @Published var maxPrice: Double = 5000
     @Published var selectedRoomType = "All"
     @Published var furnishedFilter: Bool? = nil
     @Published var petsFilter: Bool? = nil
-    
+
     private let listingService = ListingService.shared
-    private let favoritesKey = "hommies_favorites"
-    
+    private var authHandle: AuthStateDidChangeListenerHandle?
+
+    // Scoped per user — each account gets its own favorites on this device
+    private var favoritesKey: String {
+        let uid = Auth.auth().currentUser?.uid ?? "guest"
+        return "hommies_favorites_\(uid)"
+    }
+
     init() {
         loadFavorites()
+        // Reload favorites whenever the signed-in user changes so switching
+        // accounts never bleeds one user's hearts into another's.
+        authHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            DispatchQueue.main.async {
+                if user == nil {
+                    // Signed out — clear all transient state
+                    self?.listings = []
+                    self?.filteredListings = []
+                    self?.favoriteIDs = []
+                } else {
+                    // New user signed in — reload their saved favorites
+                    self?.loadFavorites()
+                }
+            }
+        }
+    }
+
+    deinit {
+        if let handle = authHandle {
+            Auth.auth().removeStateDidChangeListener(handle)
+        }
     }
     
     // MARK: - Fetch Listings
@@ -101,8 +129,8 @@ class ListingsViewModel: ObservableObject {
     private func saveFavorites() {
         UserDefaults.standard.set(Array(favoriteIDs), forKey: favoritesKey)
     }
-    
-    private func loadFavorites() {
+
+    func loadFavorites() {
         let saved = UserDefaults.standard.stringArray(forKey: favoritesKey) ?? []
         favoriteIDs = Set(saved)
     }

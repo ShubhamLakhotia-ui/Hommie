@@ -27,13 +27,18 @@ class AuthViewModel: ObservableObject {
     }
     
     // MARK: - Sign Up
-    func signUp(name: String, email: String, password: String) {
+    func signUp(name: String, email: String, password: String, profileImageData: Data? = nil) {
         isLoading = true
         errorMessage = ""
         
         Task {
             do {
-                let user = try await authService.signUp(name: name, email: email, password: password)
+                let user = try await authService.signUp(
+                    name: name,
+                    email: email,
+                    password: password,
+                    profileImageData: profileImageData
+                )
                 await MainActor.run {
                     self.currentUser = user
                     self.isLoggedIn = true
@@ -100,6 +105,13 @@ class AuthViewModel: ObservableObject {
             self.currentUser = try await authService.fetchUserProfile(uid: uid)
         } catch {
             self.errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    func fetchUserProfile() async {
+        if let uid = Auth.auth().currentUser?.uid {
+            await fetchCurrentUser(uid: uid)
         }
     }
     

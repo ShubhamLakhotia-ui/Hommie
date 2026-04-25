@@ -10,6 +10,7 @@ import SwiftUI
 struct MainTabView: View {
     
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var localizationManager: LocalizationManager
     @State private var selectedTab = 0
     
     // ONE shared ViewModel created here — injected into all tabs
@@ -22,16 +23,16 @@ struct MainTabView: View {
                 .tabItem {
                     VStack {
                         Image(systemName: selectedTab == 0 ? "house.fill" : "house")
-                        Text("Home")
+                        Text("tab_home".localized)
                     }
                 }
                 .tag(0)
             
-            Text("Search")
+            SettingsView()
                 .tabItem {
                     VStack {
-                        Image(systemName: selectedTab == 1 ? "magnifyingglass.circle.fill" : "magnifyingglass")
-                        Text("Search")
+                        Image(systemName: selectedTab == 1 ? "gearshape.fill" : "gearshape")
+                        Text("settings_title".localized)
                     }
                 }
                 .tag(1)
@@ -40,7 +41,7 @@ struct MainTabView: View {
                 .tabItem {
                     VStack {
                         Image(systemName: "plus.circle.fill")
-                        Text("Post")
+                        Text("tab_post".localized)
                     }
                 }
                 .tag(2)
@@ -49,16 +50,16 @@ struct MainTabView: View {
                 .tabItem {
                     VStack {
                         Image(systemName: selectedTab == 3 ? "heart.fill" : "heart")
-                        Text("Saved")
+                        Text("tab_saved".localized)
                     }
                 }
                 .tag(3)
             
-            ProfileView()
+            ProfileView(selectedTab: $selectedTab)
                 .tabItem {
                     VStack {
                         Image(systemName: selectedTab == 4 ? "person.fill" : "person")
-                        Text("Profile")
+                        Text("tab_profile".localized)
                     }
                 }
                 .tag(4)

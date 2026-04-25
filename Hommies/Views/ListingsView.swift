@@ -4,7 +4,8 @@ struct ListingsView: View {
     
     @EnvironmentObject var viewModel: ListingsViewModel
     @EnvironmentObject var authViewModel: AuthViewModel
-    
+    @EnvironmentObject var localizationManager: LocalizationManager
+
     @State private var showFilters = false
     
     let orangeColor = Color(hex: "E8622A")
@@ -12,9 +13,30 @@ struct ListingsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                
+
+                // MARK: - Search Bar
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Search rooms, neighborhoods...", text: $viewModel.searchText)
+                        .onChange(of: viewModel.searchText) { _, _ in
+                            viewModel.applyFilters()
+                        }
+                    if !viewModel.searchText.isEmpty {
+                        Button { viewModel.searchText = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(12)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+
                 // MARK: - Room Type Filter Chips
-                // Horizontal scrolling chips for quick room type filtering
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(["All"] + Listing.roomTypes, id: \.self) { type in
@@ -39,7 +61,7 @@ struct ListingsView: View {
                 if viewModel.isLoading {
                     // Loading state — shown while fetching from Firebase
                     Spacer()
-                    ProgressView("Finding homes...")
+                    ProgressView("browse_finding_homes".localized)
                         .foregroundColor(.secondary)
                     Spacer()
                     
@@ -49,13 +71,13 @@ struct ListingsView: View {
                     VStack(spacing: 16) {
                         Text("🏠")
                             .font(.system(size: 60))
-                        Text("No listings found")
+                        Text("browse_no_listings".localized)
                             .font(.headline)
                             .foregroundColor(.primary)
-                        Text("Try adjusting your filters")
+                        Text("browse_adjust_filters".localized)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
-                        Button("Clear Filters") {
+                        Button("browse_clear_filters".localized){
                             viewModel.selectedRoomType = "All"
                             viewModel.searchText = ""
                             viewModel.applyFilters()
@@ -71,20 +93,21 @@ struct ListingsView: View {
                     ScrollView {
                         LazyVStack(spacing: 16) {
                             ForEach(viewModel.filteredListings) { listing in
-                                // NavigationLink pushes ListingDetailView when card is tapped
                                 NavigationLink(destination: ListingDetailView(listing: listing)) {
                                     ListingCardView(listing: listing, viewModel: viewModel)
                                         .padding(.horizontal, 16)
                                 }
-                                // PlainButtonStyle removes default blue tint from NavigationLink
                                 .buttonStyle(PlainButtonStyle())
                             }
                         }
                         .padding(.vertical, 16)
                     }
+                    .refreshable {
+                        await viewModel.fetchListings()
+                    }
                 }
             }
-            .navigationTitle("Hommies")
+            .navigationTitle("browse_title".localized)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -97,17 +120,10 @@ struct ListingsView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Text("\(viewModel.filteredListings.count) homes")
+                    Text(String(format: "browse_homes_count".localized, viewModel.filteredListings.count))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-            }
-            // .searchable adds iOS native search bar to navigation bar
-            // Handles clear button, cancel button, keyboard dismiss automatically
-            .searchable(text: $viewModel.searchText, prompt: "Search rooms, neighborhoods...")
-            // Fires applyFilters every time user types a character
-            .onChange(of: viewModel.searchText) { _, _ in
-                viewModel.applyFilters()
             }
             // Opens FiltersView as a bottom sheet
             .sheet(isPresented: $showFilters) {

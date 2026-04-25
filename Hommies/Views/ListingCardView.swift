@@ -18,29 +18,26 @@ struct ListingCardView: View {
                 
                 if let firstImageURL = listing.imageURLs.first,
                    let url = URL(string: firstImageURL) {
-                    // AsyncImage loads images from URL asynchronously
-                    // No third party library needed — built into SwiftUI
                     AsyncImage(url: url) { phase in
                         switch phase {
                         case .success(let image):
                             image
                                 .resizable()
                                 .scaledToFill()
-                                .frame(height: 200)
                                 .clipped()
                         case .failure:
-                            // Show placeholder if image fails to load
                             placeholderImage
                         case .empty:
-                            // Show shimmer while loading
                             Rectangle()
                                 .fill(Color(.systemGray5))
-                                .frame(height: 200)
                                 .overlay(ProgressView())
                         @unknown default:
                             placeholderImage
                         }
                     }
+                    // Explicit frame on AsyncImage itself — prevents collapsing in LazyVStack
+                    .frame(maxWidth: .infinity, maxHeight: 200)
+                    .clipped()
                 } else {
                     placeholderImage
                 }
@@ -165,7 +162,7 @@ struct ListingCardView: View {
                     Image(systemName: "photo")
                         .font(.system(size: 32))
                         .foregroundColor(.secondary)
-                    Text("No Photo")
+                    Text("detail_no_photos".localized)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

@@ -14,11 +14,26 @@ struct ListingDetailView: View {
     
     let listing: Listing
     @EnvironmentObject var viewModel: ListingsViewModel
+    @EnvironmentObject var localizationManager: LocalizationManager
     @Environment(\.dismiss) var dismiss
     @StateObject private var detailViewModel = ListingDetailViewModel()
     @State private var showReportAlert = false
     @State private var reportSubmitted = false
+    @State private var alreadyReported = false
     let orangeColor = Color(hex: "E8622A")
+
+    var shareText: String {
+        var lines = ["🏠 \(listing.title)", "📍 \(listing.neighborhood)", "💰 $\(Int(listing.price))/month"]
+        var features: [String] = []
+        if listing.furnished { features.append("Furnished") }
+        if listing.petsAllowed { features.append("Pets allowed") }
+        if listing.utilitiesIncluded { features.append("Utilities included") }
+        if !features.isEmpty { lines.append("✅ \(features.joined(separator: " • "))") }
+        if let campus = listing.campusName { lines.append("🎓 Near \(campus)") }
+        lines.append("📧 \(listing.contactEmail)")
+        lines.append("\nFound on Hommies app")
+        return lines.joined(separator: "\n")
+    }
     
     var body: some View {
         ScrollView {
@@ -34,7 +49,7 @@ struct ListingDetailView: View {
                                 Image(systemName: "photo")
                                     .font(.system(size: 40))
                                     .foregroundColor(.secondary)
-                                Text("No Photos")
+                                Text("detail_no_photos".localized)
                                     .foregroundColor(.secondary)
                             }
                         )
@@ -135,13 +150,13 @@ struct ListingDetailView: View {
                     
                     // MARK: - Key Details Grid
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                        DetailItem(icon: "calendar", title: "Available from", value: listing.availableFrom.formatted(.dateTime.month(.abbreviated).day().year()))
-                        DetailItem(icon: "calendar.badge.checkmark", title: "Available to", value: listing.availableTo.formatted(.dateTime.month(.abbreviated).day().year()))
-                        DetailItem(icon: "person.2.fill", title: "Roommates", value: "\(listing.roommates)")
-                        DetailItem(icon: "dollarsign.circle.fill", title: "Monthly rent", value: "$\(Int(listing.price))")
-                        DetailItem(icon: "sofa.fill", title: "Furnished", value: listing.furnished ? "Yes" : "No")
-                        DetailItem(icon: "pawprint.fill", title: "Pets allowed", value: listing.petsAllowed ? "Yes" : "No")
-                        DetailItem(icon: "bolt.fill", title: "Utilities", value: listing.utilitiesIncluded ? "Included" : "Not included")
+                        DetailItem(icon: "calendar", title: "detail_available_from".localized, value: listing.availableFrom.formatted(.dateTime.month(.abbreviated).day().year()))
+                        DetailItem(icon: "calendar.badge.checkmark", title: "detail_available_to".localized, value: listing.availableTo.formatted(.dateTime.month(.abbreviated).day().year()))
+                        DetailItem(icon: "person.2.fill", title: "detail_roommates".localized, value: "\(listing.roommates)")
+                        DetailItem(icon: "dollarsign.circle.fill", title: "detail_monthly_rent".localized, value: "$\(Int(listing.price))")
+                        DetailItem(icon: "sofa.fill", title: "detail_furnished_label".localized, value: listing.furnished ? "common_yes".localized : "common_no".localized)
+                        DetailItem(icon: "pawprint.fill", title: "detail_pets_label".localized, value: listing.petsAllowed ? "common_yes".localized : "common_no".localized)
+                        DetailItem(icon: "bolt.fill", title: "detail_utilities_label".localized, value: listing.utilitiesIncluded ? "detail_included".localized : "detail_not_included".localized)
                     }
                     
                     Divider()
@@ -151,7 +166,7 @@ struct ListingDetailView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundColor(.orange)
-                            Text("This listing is over 30 days old — verify details before contacting")
+                            Text("detail_stale_warning".localized)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -169,11 +184,11 @@ struct ListingDetailView: View {
                             Image(systemName: "exclamationmark.shield.fill")
                                 .foregroundColor(.red)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Flagged by \(reportCount) user\(reportCount > 1 ? "s" : "")")
+                                Text(String(format: "detail_flagged_by".localized, reportCount))
                                     .font(.caption)
                                     .fontWeight(.semibold)
                                     .foregroundColor(.red)
-                                Text("This listing has been reported. Verify details carefully before contacting.")
+                                Text("detail_flagged_message".localized)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -187,7 +202,7 @@ struct ListingDetailView: View {
                     
                     // MARK: - Description
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("About this place")
+                        Text("detail_about".localized)
                             .font(.headline)
                             .fontWeight(.semibold)
                         Text(listing.description)
@@ -203,7 +218,7 @@ struct ListingDetailView: View {
                     if let lat = listing.latitude, let lon = listing.longitude,
                        lat != 0.0 && lon != 0.0 {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Location")
+                            Text("detail_location".localized)
                                 .font(.headline)
                                 .fontWeight(.semibold)
                             
@@ -235,7 +250,7 @@ struct ListingDetailView: View {
                                     HStack(spacing: 4) {
                                         Image(systemName: "map.fill")
                                             .font(.system(size: 11))
-                                        Text("Open in Maps")
+                                        Text("detail_open_in_maps".localized)
                                             .font(.caption)
                                             .fontWeight(.semibold)
                                     }
@@ -289,7 +304,7 @@ struct ListingDetailView: View {
                         Divider()
                         
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Area Safety")
+                            Text("detail_area_safety".localized)
                                 .font(.headline)
                                 .fontWeight(.semibold)
                             
@@ -297,7 +312,7 @@ struct ListingDetailView: View {
                                 HStack(spacing: 8) {
                                     ProgressView()
                                         .scaleEffect(0.8)
-                                    Text("Checking safety data...")
+                                    Text("detail_checking_safety".localized)
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
                                 }
@@ -314,11 +329,11 @@ struct ListingDetailView: View {
                                         )
                                     
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(detailViewModel.safetyScore)
+                                        Text(localizedSafetyScore(detailViewModel.safetyScore))
                                             .font(.subheadline)
                                             .fontWeight(.semibold)
                                             .foregroundColor(safetyColor(for: detailViewModel.safetyScore))
-                                        Text("Based on nearby crime incidents")
+                                        Text("detail_crime_basis".localized)
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                     }
@@ -341,7 +356,7 @@ struct ListingDetailView: View {
                         Divider()
                         
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Nearby Transit")
+                            Text("detail_nearby_transit".localized)
                                 .font(.headline)
                                 .fontWeight(.semibold)
                             
@@ -349,12 +364,12 @@ struct ListingDetailView: View {
                                 HStack(spacing: 8) {
                                     ProgressView()
                                         .scaleEffect(0.8)
-                                    Text("Loading transit stops...")
+                                    Text("detail_loading_transit".localized)
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
                                 }
                             } else if detailViewModel.mbtaStops.isEmpty {
-                                Text(detailViewModel.mbtaError.isEmpty ? "No transit stops nearby" : detailViewModel.mbtaError)
+                                Text(detailViewModel.mbtaError.isEmpty ? "detail_no_transit".localized : detailViewModel.mbtaError)
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
                             } else {
@@ -434,7 +449,7 @@ struct ListingDetailView: View {
                     
                     // MARK: - Posted By
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Posted by")
+                        Text("detail_posted_by".localized)
                             .font(.headline)
                             .fontWeight(.semibold)
                         HStack(spacing: 12) {
@@ -462,10 +477,11 @@ struct ListingDetailView: View {
                     
                     // MARK: - Contact Buttons
                     VStack(spacing: 12) {
-                        Link(destination: URL(string: "mailto:\(listing.contactEmail)")!) {
+                        if let emailURL = URL(string: "mailto:\(listing.contactEmail)") {
+                        Link(destination: emailURL) {
                             HStack {
                                 Image(systemName: "envelope.fill")
-                                Text("Email Poster")
+                                Text("detail_email_poster".localized)
                                     .fontWeight(.semibold)
                             }
                             .foregroundColor(.white)
@@ -474,12 +490,14 @@ struct ListingDetailView: View {
                             .background(orangeColor)
                             .cornerRadius(14)
                         }
-                        
-                        if !listing.contactPhone.isEmpty {
-                            Link(destination: URL(string: "tel:\(listing.contactPhone)")!) {
+                        }
+
+                        if !listing.contactPhone.isEmpty,
+                           let telURL = URL(string: "tel:\(listing.contactPhone.filter { $0.isNumber || $0 == "+" })") {
+                            Link(destination: telURL) {
                                 HStack {
                                     Image(systemName: "phone.fill")
-                                    Text("Call Poster")
+                                    Text("detail_call_poster".localized)
                                         .fontWeight(.semibold)
                                 }
                                 .foregroundColor(orangeColor)
@@ -501,38 +519,46 @@ struct ListingDetailView: View {
             }
         }.toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    showReportAlert = true
-                } label: {
-                    Image(systemName: "flag")
-                        .foregroundColor(.secondary)
+                ShareLink(item: shareText) {
+                    Image(systemName: "square.and.arrow.up")
+                        .foregroundColor(orangeColor)
                 }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    if !alreadyReported { showReportAlert = true }
+                } label: {
+                    Image(systemName: alreadyReported ? "flag.fill" : "flag")
+                        .foregroundColor(alreadyReported ? .orange : .secondary)
+                }
+                .disabled(alreadyReported)
             }
         }
         .navigationTitle(listing.title)
         .navigationBarTitleDisplayMode(.inline)
         .ignoresSafeArea(edges: .top)
-        .alert("Report Listing", isPresented: $showReportAlert) {
-            Button("Fake or Scam", role: .destructive) {
+        .alert("detail_report_title".localized, isPresented: $showReportAlert) {
+            Button("detail_report_fake".localized, role: .destructive) {
                 reportListing(reason: "Fake or Scam")
             }
-            Button("Inappropriate Content", role: .destructive) {
+            Button("detail_report_inappropriate".localized, role: .destructive) {
                 reportListing(reason: "Inappropriate Content")
             }
-            Button("Wrong Information", role: .destructive) {
+            Button("detail_report_wrong".localized, role: .destructive) {
                 reportListing(reason: "Wrong Information")
             }
-            Button("Cancel", role: .cancel) {}
+            Button("common_cancel".localized, role: .cancel) {}
         } message: {
-            Text("Why are you reporting this listing?")
+            Text("detail_report_message".localized)
         }
-        .alert("Report Submitted", isPresented: $reportSubmitted) {
-            Button("OK", role: .cancel) {}
+        .alert("detail_report_submitted".localized, isPresented: $reportSubmitted) {
+            Button("common_ok".localized, role: .cancel) {}
         } message: {
-            Text("Thank you for helping keep Hommies safe. We'll review this listing.")
+            Text("detail_report_thanks".localized)
         }
         .task {
             await detailViewModel.fetchData(listing: listing)
+            checkIfAlreadyReported()
         }
     }
     
@@ -560,36 +586,68 @@ struct ListingDetailView: View {
             "createdAt": Timestamp(date: Date())
         ]
         
-        db.collection("reports").addDocument(data: report) { error in
+        // Deterministic ID = listingId_uid — one document per user per listing.
+        // setData on the same ID is a no-op if they somehow call twice.
+        let reportDocId = "\(id)_\(uid)"
+        db.collection("reports").document(reportDocId).setData(report) { error in
             if error == nil {
-                // FieldValue.increment atomically adds 1
-                // Safe even if multiple users report at same time
                 db.collection("listings").document(id).updateData([
                     "reportCount": FieldValue.increment(Int64(1))
                 ])
                 reportSubmitted = true
+                alreadyReported = true
             }
         }
     }
+
+    func checkIfAlreadyReported() {
+        guard let id = listing.id,
+              let uid = Auth.auth().currentUser?.uid else { return }
+        // Direct document read — no query, works with the updated security rule
+        Firestore.firestore()
+            .collection("reports")
+            .document("\(id)_\(uid)")
+            .getDocument { snapshot, _ in
+                DispatchQueue.main.async {
+                    alreadyReported = snapshot?.exists ?? false
+                }
+            }
+    }
+
+    // MARK: - Localized Safety Score
+    // API always returns English — map to localized display string
+    func localizedSafetyScore(_ score: String) -> String {
+        switch score {
+        case "Very Safe":       return "safety_very_safe".localized
+        case "Generally Safe":  return "safety_generally_safe".localized
+        case "Moderate":        return "safety_moderate".localized
+        case "Use Caution":     return "safety_use_caution".localized
+        case "High Activity":   return "safety_high_activity".localized
+        default:                return score
+        }
+    }
+
     // MARK: - Safety Color
     func safetyColor(for score: String) -> Color {
         switch score {
-        case "Very Safe": return .green
+        case "Very Safe":      return .green
         case "Generally Safe": return Color(hex: "00843D")
-        case "Moderate": return .orange
-        case "Use Caution": return .red
-        default: return .red
+        case "Moderate":       return .orange
+        case "Use Caution":    return .red
+        case "High Activity":  return Color(hex: "8B0000")
+        default:               return .secondary
         }
     }
 
     // MARK: - Safety Icon
     func safetyIcon(for score: String) -> String {
         switch score {
-        case "Very Safe": return "checkmark.shield.fill"
+        case "Very Safe":      return "checkmark.shield.fill"
         case "Generally Safe": return "checkmark.shield.fill"
-        case "Moderate": return "exclamationmark.shield.fill"
-        case "Use Caution": return "xmark.shield.fill"
-        default: return "xmark.shield.fill"
+        case "Moderate":       return "exclamationmark.shield.fill"
+        case "Use Caution":    return "xmark.shield.fill"
+        case "High Activity":  return "xmark.shield.fill"
+        default:               return "shield.slash.fill"
         }
     }
 }

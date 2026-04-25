@@ -8,24 +8,29 @@
 import SwiftUI
 
 struct FavoritesView: View {
-    
+
     @EnvironmentObject var viewModel: ListingsViewModel
+    @EnvironmentObject var localizationManager: LocalizationManager
     let orangeColor = Color(hex: "E8622A")
-    
+
+    // Snapshot of favorites taken when the tab appears — prevents the empty-state
+    // flash that happens when fetchListings() replaces the listings array mid-render.
+    @State private var stableFavorites: [Listing] = []
+
     var body: some View {
         NavigationStack {
             Group {
-                if viewModel.favoriteListings.isEmpty {
-                    // Empty state
+                if stableFavorites.isEmpty && !viewModel.isLoading {
+                    // Empty state — only shown when we're sure there are no favorites
                     VStack(spacing: 16) {
                         Spacer()
                         Image(systemName: "heart.slash")
                             .font(.system(size: 60))
                             .foregroundColor(.secondary)
-                        Text("No saved listings")
+                        Text("favorites_empty".localized)
                             .font(.headline)
                             .foregroundColor(.primary)
-                        Text("Tap the heart on any listing to save it here")
+                        Text("favorites_empty_subtitle".localized)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -35,7 +40,7 @@ struct FavoritesView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 16) {
-                            ForEach(viewModel.favoriteListings) { listing in
+                            ForEach(stableFavorites) { listing in
                                 NavigationLink(destination: ListingDetailView(listing: listing)) {
                                     ListingCardView(listing: listing, viewModel: viewModel)
                                         .padding(.horizontal, 16)
@@ -47,12 +52,26 @@ struct FavoritesView: View {
                     }
                 }
             }
-            .navigationTitle("Saved")
+            .navigationTitle("favorites_title".localized)
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
+            .onAppear {
+                // Reload favorites for the current user (handles account switching)
+                viewModel.loadFavorites()
+                // Capture favorites before the fetch so AsyncImage never loses
+                // its position — the stable snapshot is updated AFTER fetch completes.
                 if !viewModel.favoriteListings.isEmpty {
+                    stableFavorites = viewModel.favoriteListings
+                }
+                Task {
+                    await viewModel.fetchListings()
+                    // Update snapshot once fresh data has arrived
+                    stableFavorites = viewModel.favoriteListings
+                }
+            }
+            .toolbar {
+                if !stableFavorites.isEmpty {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Text("\(viewModel.favoriteListings.count) saved")
+                        Text("\(stableFavorites.count) saved")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

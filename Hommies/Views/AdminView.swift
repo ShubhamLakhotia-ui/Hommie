@@ -9,12 +9,13 @@ import FirebaseFirestore
 
 struct AdminView: View {
     
+    @EnvironmentObject var localizationManager: LocalizationManager
     @State private var reportedListings: [Listing] = []
     @State private var isLoading = false
     @State private var showRestoreAlert = false
     @State private var showDeleteAlert = false
     @State private var selectedListing: Listing? = nil
-    
+
     let orangeColor = Color(hex: "E8622A")
     
     var body: some View {
@@ -23,16 +24,16 @@ struct AdminView: View {
                 
                 // MARK: - Header Stats
                 HStack(spacing: 0) {
-                    StatItem(value: "\(reportedListings.count)", label: "Reported")
+                    StatItem(value: "\(reportedListings.count)", label: "admin_reported".localized)
                     Divider().frame(height: 40)
                     StatItem(
                         value: "\(reportedListings.filter { ($0.reportCount ?? 0) >= 3 }.count)",
-                        label: "Hidden"
+                        label: "admin_hidden".localized
                     )
                     Divider().frame(height: 40)
                     StatItem(
                         value: "\(reportedListings.filter { ($0.reportCount ?? 0) < 3 }.count)",
-                        label: "Flagged"
+                        label: "admin_flagged".localized
                     )
                 }
                 .background(Color(.secondarySystemBackground))
@@ -40,17 +41,17 @@ struct AdminView: View {
                 .padding(.horizontal, 16)
                 
                 if isLoading {
-                    ProgressView("Loading reported listings...")
+                    ProgressView("admin_loading".localized)
                         .padding(40)
-                        
+
                 } else if reportedListings.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "checkmark.shield.fill")
                             .font(.system(size: 60))
                             .foregroundColor(.green)
-                        Text("No reported listings")
+                        Text("admin_no_reports".localized)
                             .font(.headline)
-                        Text("All listings are clean!")
+                        Text("admin_all_clean".localized)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
@@ -65,7 +66,7 @@ struct AdminView: View {
                                 HStack {
                                     // Hidden or flagged badge
                                     if (listing.reportCount ?? 0) >= 3 {
-                                        Label("Hidden from browse", systemImage: "eye.slash.fill")
+                                        Label("admin_hidden_badge".localized, systemImage: "eye.slash.fill")
                                             .font(.caption)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.white)
@@ -74,7 +75,7 @@ struct AdminView: View {
                                             .background(Color.red)
                                             .cornerRadius(20)
                                     } else {
-                                        Label("Flagged — still visible", systemImage: "flag.fill")
+                                        Label("admin_flagged_badge".localized, systemImage: "flag.fill")
                                             .font(.caption)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.white)
@@ -83,11 +84,10 @@ struct AdminView: View {
                                             .background(Color.orange)
                                             .cornerRadius(20)
                                     }
-                                    
+
                                     Spacer()
-                                    
-                                    // Report count
-                                    Text("\(listing.reportCount ?? 0) reports")
+
+                                    Text(String(format: "admin_reports_count".localized, listing.reportCount ?? 0))
                                         .font(.caption)
                                         .fontWeight(.bold)
                                         .foregroundColor(.red)
@@ -130,7 +130,7 @@ struct AdminView: View {
                                         Text("$\(Int(listing.price))/mo · \(listing.neighborhood)")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
-                                        Text("Posted by: \(listing.ownerEmail)")
+                                        Text("\("admin_posted_by".localized) \(listing.ownerEmail)")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                             .lineLimit(1)
@@ -146,7 +146,7 @@ struct AdminView: View {
                                     } label: {
                                         HStack(spacing: 6) {
                                             Image(systemName: "checkmark.circle.fill")
-                                            Text("Restore listing")
+                                            Text("admin_restore_listing".localized)
                                                 .fontWeight(.medium)
                                         }
                                         .font(.subheadline)
@@ -164,7 +164,7 @@ struct AdminView: View {
                                     } label: {
                                         HStack(spacing: 6) {
                                             Image(systemName: "trash.fill")
-                                            Text("Delete listing")
+                                            Text("admin_delete_listing".localized)
                                                 .fontWeight(.medium)
                                         }
                                         .font(.subheadline)
@@ -193,7 +193,7 @@ struct AdminView: View {
             }
             .padding(.vertical, 16)
         }
-        .navigationTitle("Admin Panel")
+        .navigationTitle("profile_admin_panel".localized)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -209,26 +209,26 @@ struct AdminView: View {
             fetchReportedListings()
         }
         // Restore alert
-        .alert("Restore Listing", isPresented: $showRestoreAlert) {
-            Button("Restore", role: .none) {
+        .alert("admin_restore_title".localized, isPresented: $showRestoreAlert) {
+            Button("common_restore".localized, role: .none) {
                 if let listing = selectedListing {
                     resetListing(listing)
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button("common_cancel".localized, role: .cancel) {}
         } message: {
-            Text("This will clear all reports on \"\(selectedListing?.title ?? "")\" and make it visible again.")
+            Text(String(format: "admin_restore_message".localized, selectedListing?.title ?? ""))
         }
         // Delete alert
-        .alert("Delete Listing", isPresented: $showDeleteAlert) {
-            Button("Delete", role: .destructive) {
+        .alert("admin_delete_title".localized, isPresented: $showDeleteAlert) {
+            Button("common_delete".localized, role: .destructive) {
                 if let listing = selectedListing {
                     deleteListing(listing)
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button("common_cancel".localized, role: .cancel) {}
         } message: {
-            Text("Permanently delete \"\(selectedListing?.title ?? "")\"? This cannot be undone.")
+            Text(String(format: "admin_delete_message".localized, selectedListing?.title ?? ""))
         }
     }
     

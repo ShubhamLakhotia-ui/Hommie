@@ -3,6 +3,7 @@ import FirebaseAuth
 struct SignInView: View {
     
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var localizationManager: LocalizationManager
     @Environment(\.dismiss) var dismiss
     
     @State private var email = ""
@@ -33,10 +34,10 @@ struct SignInView: View {
                     
                     // MARK: - Header
                     VStack(spacing: 8) {
-                        Text("Welcome Back")
+                        Text("auth_welcome_back".localized)
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundColor(.primary)
-                        Text("Sign in to find your home")
+                        Text("auth_sign_in_subtitle".localized)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
@@ -55,13 +56,13 @@ struct SignInView: View {
                     VStack(spacing: 16) {
                         HommiesTextField(
                             icon: "envelope.fill",
-                            placeholder: "Email Address",
+                            placeholder: "field_email".localized,
                             text: $email,
                             keyboardType: .emailAddress
                         )
                         HommiesSecureField(
                             icon: "lock.fill",
-                            placeholder: "Password",
+                            placeholder: "field_password".localized,
                             text: $password,
                             isVisible: $isPasswordVisible
                         )
@@ -88,7 +89,7 @@ struct SignInView: View {
                             if authViewModel.isLoading {
                                 ProgressView().tint(.white)
                             } else {
-                                Text("Sign In")
+                                Text("auth_sign_in".localized)
                                     .font(.headline)
                                     .fontWeight(.bold)
                                     .foregroundColor(.white)
@@ -98,7 +99,7 @@ struct SignInView: View {
                     .padding(.horizontal, 24)
                     .disabled(authViewModel.isLoading)
                     // Add this below the password field in SignInView
-                    Button("Forgot Password?") {
+                    Button("auth_forgot_password".localized) {
                         forgotPassword()
                     }
                     .font(.caption)
@@ -107,11 +108,9 @@ struct SignInView: View {
                     .padding(.trailing, 24)
                     // MARK: - Sign Up Link
                     HStack {
-                        Text("Don't have an account?")
+                        Text("auth_no_account".localized)
                             .foregroundColor(.secondary)
-                        // dismiss goes back to WelcomeView
-                        // user can then tap Get Started
-                        Button("Sign Up") {
+                        Button("auth_sign_up".localized) {
                             dismiss()
                         }
                         .foregroundColor(orangeColor)
@@ -131,7 +130,7 @@ struct SignInView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
-                        Text("Back")
+                        Text("auth_back".localized)
                     }
                     .foregroundColor(orangeColor)
                 }
@@ -144,11 +143,11 @@ struct SignInView: View {
         authViewModel.errorMessage = ""
         
         guard !email.trimmingCharacters(in: .whitespaces).isEmpty else {
-            localError = "Please enter your email"
+            localError = "error_email_required".localized
             return
         }
         guard !password.isEmpty else {
-            localError = "Please enter your password"
+            localError = "error_password_required".localized
             return
         }
         
@@ -156,13 +155,11 @@ struct SignInView: View {
     }
     func forgotPassword() {
         guard !email.trimmingCharacters(in: .whitespaces).isEmpty else {
-            localError = "Enter your email first then tap Forgot Password"
+            localError = "error_enter_email_first".localized
             return
         }
-        // Firebase sends a reset email — works even if account doesn't exist
-        // Firebase won't tell you if email exists or not (security)
         Auth.auth().sendPasswordReset(withEmail: email) { _ in
-            localError = "If this email exists, a reset link has been sent."
+            localError = "error_reset_sent".localized
         }
     }
 }

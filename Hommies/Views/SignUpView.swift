@@ -4,6 +4,7 @@ import PhotosUI
 struct SignUpView: View {
     
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var localizationManager: LocalizationManager
     @Environment(\.dismiss) var dismiss
     
     @State private var name = ""
@@ -37,10 +38,10 @@ struct SignUpView: View {
                 VStack(spacing: 24) {
                     
                     VStack(spacing: 8) {
-                        Text("Create Account")
+                        Text("auth_create_account".localized)
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundColor(.primary)
-                        Text("Find your perfect student home")
+                        Text("auth_sign_up_subtitle".localized)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
@@ -64,7 +65,7 @@ struct SignUpView: View {
                                     Image(systemName: "person.fill")
                                         .font(.system(size: 30))
                                         .foregroundColor(orangeColor.opacity(0.5))
-                                    Text("Optional")
+                                    Text("auth_optional".localized)
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                 }
@@ -90,10 +91,10 @@ struct SignUpView: View {
                     }
                     
                     VStack(spacing: 16) {
-                        HommiesTextField(icon: "person.fill", placeholder: "Full Name", text: $name)
-                        HommiesTextField(icon: "envelope.fill", placeholder: "Email Address", text: $email, keyboardType: .emailAddress)
-                        HommiesSecureField(icon: "lock.fill", placeholder: "Password", text: $password, isVisible: $isPasswordVisible)
-                        HommiesSecureField(icon: "lock.fill", placeholder: "Confirm Password", text: $confirmPassword, isVisible: $isConfirmPasswordVisible)
+                        HommiesTextField(icon: "person.fill", placeholder: "field_full_name".localized, text: $name)
+                        HommiesTextField(icon: "envelope.fill", placeholder: "field_email".localized, text: $email, keyboardType: .emailAddress)
+                        HommiesSecureField(icon: "lock.fill", placeholder: "field_password".localized, text: $password, isVisible: $isPasswordVisible)
+                        HommiesSecureField(icon: "lock.fill", placeholder: "field_confirm_password".localized, text: $confirmPassword, isVisible: $isConfirmPasswordVisible)
                     }
                     .padding(.horizontal, 24)
                     
@@ -115,7 +116,7 @@ struct SignUpView: View {
                             if authViewModel.isLoading {
                                 ProgressView().tint(.white)
                             } else {
-                                Text("Create Account")
+                                Text("auth_create_account".localized)
                                     .font(.headline)
                                     .fontWeight(.bold)
                                     .foregroundColor(.white)
@@ -126,9 +127,9 @@ struct SignUpView: View {
                     .disabled(authViewModel.isLoading)
                     
                     HStack {
-                        Text("Already have an account?")
+                        Text("auth_have_account".localized)
                             .foregroundColor(.secondary)
-                        Button("Sign In") {
+                        Button("auth_sign_in".localized) {
                             dismiss()
                         }
                         .foregroundColor(orangeColor)
@@ -148,7 +149,7 @@ struct SignUpView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
-                        Text("Back")
+                        Text("auth_back".localized)
                     }
                     .foregroundColor(orangeColor)
                 }
@@ -161,23 +162,41 @@ struct SignUpView: View {
         authViewModel.errorMessage = ""
         
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else {
-            localError = "Please enter your name"
+            localError = "error_name_required".localized
             return
         }
         guard !email.trimmingCharacters(in: .whitespaces).isEmpty else {
-            localError = "Please enter your email"
+            localError = "error_email_required".localized
             return
         }
         guard password.count >= 6 else {
-            localError = "Password must be at least 6 characters"
+            localError = "error_password_length".localized
             return
         }
         guard password == confirmPassword else {
-            localError = "Passwords do not match"
+            localError = "error_passwords_mismatch".localized
             return
         }
         
-        authViewModel.signUp(name: name, email: email, password: password)
+        // Upload profile photo if selected
+            Task {
+                if let selectedItem = selectedPhotoItem {
+                    let imageData = try? await selectedItem.loadTransferable(type: Data.self)
+                    authViewModel.signUp(
+                        name: name,
+                        email: email,
+                        password: password,
+                        profileImageData: imageData
+                    )
+                } else {
+                    authViewModel.signUp(
+                        name: name,
+                        email: email,
+                        password: password
+                    )
+                }
+            }
+        
     }
 }
 

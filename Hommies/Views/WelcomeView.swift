@@ -3,6 +3,7 @@ import SwiftUI
 
 struct WelcomeView: View {
         @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var localizationManager: LocalizationManager
     @State private var logoVisible = false
     @State private var titleVisible = false
     @State private var taglineVisible = false
@@ -100,7 +101,7 @@ struct WelcomeView: View {
                     Spacer().frame(height: 12)
                     
                     // MARK: - Tagline
-                    Text("Your student home, sorted.")
+                    Text("auth_welcome_tagline".localized)
                         .font(.title3)
                      
                         .fontWeight(.medium)
@@ -113,10 +114,16 @@ struct WelcomeView: View {
                     
                     
                     HStack(spacing: 8) {
-            
-                        LanguagePill(emoji: "🇺🇸", language: "EN")
-                        LanguagePill(emoji: "🇪🇸", language: "ES")
-                        LanguagePill(emoji: "🇮🇳", language: "HI")
+                        ForEach(LocalizationManager.Language.allCases, id: \.self) { language in
+                            LanguagePill(
+                                language: language,
+                                isSelected: localizationManager.currentLanguage == language
+                            ) {
+                                withAnimation {
+                                    localizationManager.currentLanguage = language
+                                }
+                            }
+                        }
                     }
                     .opacity(taglineVisible ? 1 : 0)
                     .animation(.easeIn(duration: 0.6), value: taglineVisible)
@@ -132,7 +139,7 @@ struct WelcomeView: View {
                         NavigationLink(destination: SignUpView()) {
                             // HStack arranges icon and text horizontally
                             HStack {
-                                Text("Get Started")
+                                Text("auth_get_started".localized)
                                     .font(.headline)
                                     .fontWeight(.bold)
                                 // Spacer pushes icon to the right
@@ -153,7 +160,7 @@ struct WelcomeView: View {
                         // Sign In Button → goes to SignInView
                         NavigationLink(destination: SignInView()) {
                             HStack {
-                                Text("Sign In")
+                                Text("auth_sign_in".localized)
                                     .font(.headline)
                                     .fontWeight(.semibold)
                                 Spacer()
@@ -218,26 +225,28 @@ struct WelcomeView: View {
 // MARK: - Language Pill Component
 
 struct LanguagePill: View {
-    
 
-    let emoji: String
-    let language: String
-    
+    let language: LocalizationManager.Language
+    let isSelected: Bool
+    let action: () -> Void
+
     var body: some View {
-       
-        HStack(spacing: 4) {
-            Text(emoji)
-                .font(.caption)
-            Text(language)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Text(language.flag)
+                    .font(.caption)
+                Text(language.rawValue.uppercased())
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(isSelected ? Color(hex: "E8622A") : .white)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(isSelected ? Color.white : Color.white.opacity(0.2))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule().stroke(Color.white.opacity(isSelected ? 0 : 0.4), lineWidth: 1)
+            )
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        // Semi-transparent white background for the pill shape
-        .background(Color.white.opacity(0.2))
-        // capsule shape = fully rounded ends like a pill
-        .clipShape(Capsule())
     }
 }
